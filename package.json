@@ -19,7 +19,10 @@
     "db:stop": "npx supabase stop",
     "db:reset": "npx supabase db reset",
     "db:check": "psql \"postgresql://postgres:postgres@127.0.0.1:54322/postgres\" -f supabase/checks/rls_checks.sql",
-    "gen:types": "pnpm --filter @turno/shared gen:types"
+    "gen:types": "pnpm --filter @turno/shared gen:types",
+    "functions:check": "npx -y deno@2.9.6 check --config supabase/functions/send-push/deno.json supabase/functions/send-push && npx -y deno@2.9.6 lint --config supabase/functions/send-push/deno.json supabase/functions",
+    "functions:test": "npx -y deno@2.9.6 test --config supabase/functions/send-push/deno.json supabase/functions",
+    "functions:deploy": "npx supabase functions deploy send-push --no-verify-jwt"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

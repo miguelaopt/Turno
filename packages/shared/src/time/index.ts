@@ -172,10 +172,23 @@ const weekdayLongFormatter = new Intl.DateTimeFormat(LOCALE, {
   timeZone: TIME_ZONE,
   weekday: 'long',
 });
-const weekdayShortFormatter = new Intl.DateTimeFormat(LOCALE, {
-  timeZone: TIME_ZONE,
-  weekday: 'short',
-});
+// Abreviaturas fixas (o ICU varia entre motores: "qui." vs "quinta").
+// Iguais às de private.format_shift na base de dados.
+const WEEKDAYS_SHORT = ['seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.', 'dom.'] as const;
+const MONTHS_SHORT = [
+  'jan.',
+  'fev.',
+  'mar.',
+  'abr.',
+  'mai.',
+  'jun.',
+  'jul.',
+  'ago.',
+  'set.',
+  'out.',
+  'nov.',
+  'dez.',
+] as const;
 const monthLongFormatter = new Intl.DateTimeFormat(LOCALE, {
   timeZone: TIME_ZONE,
   month: 'long',
@@ -199,7 +212,7 @@ export function formatWeekday(value: DateInput): string {
 
 /** "seg." */
 export function formatWeekdayShort(value: DateInput): string {
-  return weekdayShortFormatter.format(toDate(value));
+  return WEEKDAYS_SHORT[zonedParts(value).weekdayIndex] ?? '';
 }
 
 /** "2 de novembro" */
@@ -247,4 +260,20 @@ export function maskTimeInput(text: string): string {
   if (digits.length <= 2) return digits;
   if (digits.length === 3) return `0${digits[0]}:${digits.slice(1)}`;
   return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+/** "qui., 5 nov." */
+export function formatDayShort(value: DateInput): string {
+  const p = zonedParts(value);
+  return `${formatWeekdayShort(value)}, ${p.day} ${MONTHS_SHORT[p.month - 1] ?? ''}`;
+}
+
+/** "qui., 5 nov., 07:00–15:00" (o mesmo formato das notificações geradas na BD). */
+export function formatShiftSummary(start: DateInput, end: DateInput): string {
+  return `${formatDayShort(start)}, ${formatTimeRange(start, end)}`;
+}
+
+/** "seg., 2 nov., 14:05" */
+export function formatDateTimeShort(value: DateInput): string {
+  return `${formatDayShort(value)}, ${formatTime(value)}`;
 }

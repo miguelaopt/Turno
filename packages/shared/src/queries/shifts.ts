@@ -7,7 +7,9 @@ import { queryKeys } from './keys';
 export type Shift = Tables<'shifts'>;
 
 /** Converte uma linha da BD no formato usado pelas funções puras. */
-export function shiftToRange(shift: Pick<Shift, 'id' | 'starts_at' | 'ends_at'>): TimeRange {
+export function shiftToRange(
+  shift: Pick<Shift, 'id' | 'starts_at' | 'ends_at'>,
+): TimeRange & { id: string } {
   return { id: shift.id, startsAt: shift.starts_at, endsAt: shift.ends_at };
 }
 

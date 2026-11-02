@@ -190,3 +190,90 @@ export const styles = StyleSheet.create({
     gap: spacing.xs,
   },
 });
+
+const badgeTones = {
+  accent: { backgroundColor: colors.accentSoft, color: colors.accent },
+  urgent: { backgroundColor: colors.urgentSoft, color: colors.urgent },
+  muted: { backgroundColor: colors.background, color: colors.textMuted },
+} as const;
+
+export function Badge({ tone, label }: { tone: keyof typeof badgeTones; label: string }) {
+  const t = badgeTones[tone];
+  return (
+    <View
+      style={{
+        backgroundColor: t.backgroundColor,
+        borderRadius: radii.pill,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 2,
+        alignSelf: 'flex-start',
+        borderWidth: tone === 'muted' ? 1 : 0,
+        borderColor: colors.border,
+      }}
+    >
+      <Text weight="bold" size="xs" style={{ color: t.color }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/** Opções em lista (estilo rádio), com alvo de toque grande. */
+export function ChoiceRow({
+  selected,
+  title,
+  description,
+  onPress,
+  tone = 'accent',
+}: {
+  selected: boolean;
+  title: string;
+  description?: string;
+  onPress: () => void;
+  tone?: 'accent' | 'urgent';
+}) {
+  const active = tone === 'urgent' ? colors.urgent : colors.accent;
+  const soft = tone === 'urgent' ? colors.urgentSoft : colors.accentSoft;
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={{
+        minHeight: minTouchTarget,
+        flexDirection: 'row',
+        gap: spacing.md,
+        alignItems: 'center',
+        padding: spacing.md,
+        borderRadius: radii.control,
+        borderWidth: 1,
+        borderColor: selected ? active : colors.border,
+        backgroundColor: selected ? soft : colors.surface,
+      }}
+    >
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          borderWidth: 2,
+          borderColor: selected ? active : colors.border,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {selected ? (
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: active }} />
+        ) : null}
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text weight="semibold">{title}</Text>
+        {description ? (
+          <Text muted size="sm">
+            {description}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}

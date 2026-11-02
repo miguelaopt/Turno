@@ -1,5 +1,7 @@
 import {
+  activeRequestForShift,
   buildWeekView,
+  canRequestSwap,
   capitalizeFirst,
   formatDayLong,
   formatHours,
@@ -14,32 +16,27 @@ import {
   toLisbonDateKey,
   toLisbonTimeString,
   weekQueryRange,
-  type MyProfile,
+  swapStatusLabel,
   type Shift,
-  type TurnoClient,
 } from '@turno/shared';
 import { colors, radii, spacing } from '@turno/shared/tokens';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useMyShifts, useShiftMutations, useStoreRealtime } from '@/hooks/use-turno-data';
-import { Button, Card, Text, WarningBox } from './ui';
+import { useSession } from '@/hooks/use-session';
+import { useMyShifts, useShiftMutations, useSwapRequests } from '@/hooks/use-turno-data';
+import { Badge, Button, Card, Text, WarningBox } from './ui';
 
-export function ShiftsScreen({
-  client,
-  profile,
-  onSignOut,
-}: {
-  client: TurnoClient;
-  profile: MyProfile;
-  onSignOut: () => void;
-}) {
+export function ShiftsScreen() {
+  const { client, profile, signOut } = useSession();
+  const onSignOut = () => void signOut();
   const [weekStart, setWeekStart] = useState(() => startOfLisbonWeek(new Date()));
   const range = useMemo(() => weekQueryRange(weekStart), [weekStart]);
   const shifts = useMyShifts(client, profile.id, range);
   const { remove } = useShiftMutations(client, profile.id, profile.store_id);
-  useStoreRealtime(client, profile.store_id);
+  const swaps = useSwapRequests(client, profile.store_id);
+  const requests = swaps.data ?? [];
 
   const view = useMemo(
     () =>
@@ -98,7 +95,10 @@ export function ShiftsScreen({
         refreshControl={
           <RefreshControl
             refreshing={shifts.isRefetching}
-            onRefresh={() => void shifts.refetch()}
+            onRefresh={() => {
+              void shifts.refetch();
+              void swaps.refetch();
+            }}
             tintColor={colors.accent}
           />
         }
@@ -232,48 +232,94 @@ export function ShiftsScreen({
                 {shifts.isPending ? 'A carregar…' : 'Sem turnos.'}
               </Text>
             ) : (
-              day.shifts.map((shift) => (
-                <View
-                  key={shift.id}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    backgroundColor: colors.background,
-                    borderRadius: radii.control,
-                    paddingLeft: spacing.md,
-                  }}
-                >
-                  <View style={{ paddingVertical: spacing.sm }}>
-                    <Text weight="semibold" style={{ fontVariant: ['tabular-nums'] }}>
-                      {formatTimeRange(shift.starts_at, shift.ends_at)}
-                      {toLisbonDateKey(shift.ends_at) !== day.dateKey ? (
-                        <Text muted size="sm">
-                          {' '}
-                          (acaba {formatWeekdayShort(shift.ends_at)})
-                        </Text>
+              day.shifts.map((shift) => {
+                const active = activeRequestForShift(shift.id, requests);
+                const label = formatTimeRange(shift.starts_at, shift.ends_at);
+                return (
+                  <View
+                    key={shift.id}
+                    style={{
+                      backgroundColor: colors.background,
+                      borderRadius: radii.control,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      gap: spacing.xs,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text weight="semibold" style={{ fontVariant: ['tabular-nums'] }}>
+                        {label}
+                        {toLisbonDateKey(shift.ends_at) !== day.dateKey ? (
+                          <Text muted size="sm">
+                            {' '}
+                            (acaba {formatWeekdayShort(shift.ends_at)})
+                          </Text>
+                        ) : null}
+                      </Text>
+                      <Text muted size="sm">
+                        {formatHours(shift.durationHours)}
+                      </Text>
+                    </View>
+                    {active ? (
+                      <Pressable
+                        accessibilityRole="link"
+                        onPress={() => router.push(`/pedidos/${active.id}`)}
+                        style={{ minHeight: 32, justifyContent: 'center' }}
+                      >
+                        <Badge
+                          tone={active.status === 'accepted' ? 'urgent' : 'accent'}
+                          label={
+                            active.shift?.id === shift.id
+                              ? `Pedido: ${swapStatusLabel[active.status].toLowerCase()} ›`
+                              : 'Oferecido numa troca ›'
+                          }
+                        />
+                      </Pressable>
+                    ) : null}
+                    <View
+                      style={{ flexDirection: 'row', flexWrap: 'wrap', marginLeft: -spacing.md }}
+                    >
+                      {canRequestSwap(shift, profile, requests) ? (
+                        <Button
+                          title="Pedir troca"
+                          variant="ghost"
+                          accessibilityLabel={`Pedir troca do turno ${label}`}
+                          onPress={() =>
+                            router.push({
+                              pathname: '/pedir-troca',
+                              params: {
+                                shiftId: shift.id,
+                                startsAt: shift.starts_at,
+                                endsAt: shift.ends_at,
+                              },
+                            })
+                          }
+                        />
                       ) : null}
-                    </Text>
-                    <Text muted size="sm">
-                      {formatHours(shift.durationHours)}
-                    </Text>
+                      {!active ? (
+                        <Button
+                          title="Editar"
+                          variant="ghost"
+                          accessibilityLabel={`Editar turno ${label}`}
+                          onPress={() => openEdit(shift)}
+                        />
+                      ) : null}
+                      <Button
+                        title="Apagar"
+                        variant="ghost"
+                        accessibilityLabel={`Apagar turno ${label}`}
+                        onPress={() => confirmDelete(shift)}
+                      />
+                    </View>
                   </View>
-                  <View style={{ flexDirection: 'row' }}>
-                    <Button
-                      title="Editar"
-                      variant="ghost"
-                      accessibilityLabel={`Editar turno ${formatTimeRange(shift.starts_at, shift.ends_at)}`}
-                      onPress={() => openEdit(shift)}
-                    />
-                    <Button
-                      title="Apagar"
-                      variant="ghost"
-                      accessibilityLabel={`Apagar turno ${formatTimeRange(shift.starts_at, shift.ends_at)}`}
-                      onPress={() => confirmDelete(shift)}
-                    />
-                  </View>
-                </View>
-              ))
+                );
+              })
             )}
           </Card>
         ))}

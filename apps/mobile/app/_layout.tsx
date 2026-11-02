@@ -56,9 +56,7 @@ export default function RootLayout() {
               headerShown: false,
               contentStyle: { backgroundColor: colors.background },
             }}
-          >
-            <Stack.Screen name="turno" options={{ presentation: 'modal' }} />
-          </Stack>
+          />
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

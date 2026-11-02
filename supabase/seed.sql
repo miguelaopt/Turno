@@ -87,3 +87,34 @@ from week, (values
   ('00000000-0000-4000-8000-0000000000b3'::uuid, 5, time '11:00', interval '5 hours'),
   ('00000000-0000-4000-8000-0000000000b3'::uuid, 6, time '11:00', interval '5 hours')
 ) as s (user_id, day_offset, start_time, duration);
+
+-- Pedidos de exemplo (semana seguinte, para estarem sempre no futuro) ---------
+with week as (
+  select date_trunc('week', now() at time zone 'Europe/Lisbon') + interval '7 days' as monday
+)
+insert into public.shifts (id, store_id, user_id, starts_at, ends_at)
+select s.id, '00000000-0000-4000-8000-000000000001', s.user_id,
+  (week.monday + s.day_offset * interval '1 day' + s.start_time) at time zone 'Europe/Lisbon',
+  (week.monday + s.day_offset * interval '1 day' + s.start_time + s.duration) at time zone 'Europe/Lisbon'
+from week, (values
+  ('00000000-0000-4000-8000-00000000d001'::uuid, '00000000-0000-4000-8000-0000000000b2'::uuid, 0, time '18:00', interval '6 hours'),
+  ('00000000-0000-4000-8000-00000000d002'::uuid, '00000000-0000-4000-8000-0000000000b1'::uuid, 2, time '09:00', interval '8 hours'),
+  ('00000000-0000-4000-8000-00000000d003'::uuid, '00000000-0000-4000-8000-0000000000b3'::uuid, 3, time '11:00', interval '5 hours')
+) as s (id, user_id, day_offset, start_time, duration);
+
+-- Bruno precisa que alguém cubra a falta de segunda (aberto, urgente).
+insert into public.swap_requests (store_id, shift_id, requester_id, type, note)
+values ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-00000000d001',
+        '00000000-0000-4000-8000-0000000000b2', 'cover', 'Consulta médica');
+
+-- A Ana quer trocar a quarta; a Carla aceitou e oferece a quinta (à espera da gerente).
+insert into public.swap_requests (id, store_id, shift_id, requester_id, type, note)
+values ('00000000-0000-4000-8000-00000000e001', '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-00000000d002', '00000000-0000-4000-8000-0000000000b1', 'swap',
+        'Tenho exame na quarta de manhã');
+update public.swap_requests
+set status = 'accepted',
+    accepted_by = '00000000-0000-4000-8000-0000000000b3',
+    accepted_at = now(),
+    offered_shift_id = '00000000-0000-4000-8000-00000000d003'
+where id = '00000000-0000-4000-8000-00000000e001';

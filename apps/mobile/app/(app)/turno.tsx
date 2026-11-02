@@ -18,34 +18,24 @@ import {
   weekQueryRange,
   zonedParts,
   type MyProfile,
-  type Session,
   type ShiftFormValues,
   type TurnoClient,
 } from '@turno/shared';
 import { colors, radii, spacing } from '@turno/shared/tokens';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LoadingScreen } from '@/components/screen-message';
 import { Button, Text, TextField, WarningBox } from '@/components/ui';
-import { useAuth } from '@/hooks/use-auth';
-import { useMyProfile, useMyShifts, useShiftMutations } from '@/hooks/use-turno-data';
+import { useSession } from '@/hooks/use-session';
+import { useMyShifts, useShiftMutations } from '@/hooks/use-turno-data';
 
 type Params = { id?: string; date?: string; startTime?: string; endTime?: string };
 
 /** Modal para criar ou editar um turno. */
 export default function ShiftFormScreen() {
-  const auth = useAuth();
-  if (auth.status === 'loading') return <LoadingScreen />;
-  if (auth.status !== 'signed-in') return <Redirect href="/" />;
-  return <WithProfile client={auth.client} session={auth.session} />;
-}
-
-function WithProfile({ client, session }: { client: TurnoClient; session: Session }) {
-  const profile = useMyProfile(client, session.user.id);
-  if (!profile.data) return <LoadingScreen />;
-  return <ShiftForm client={client} profile={profile.data} />;
+  const { client, profile } = useSession();
+  return <ShiftForm client={client} profile={profile} />;
 }
 
 function ShiftForm({ client, profile }: { client: TurnoClient; profile: MyProfile }) {

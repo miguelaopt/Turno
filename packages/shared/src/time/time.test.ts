@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   capitalizeFirst,
+  formatDateTimeShort,
+  formatShiftSummary,
   maskTimeInput,
   formatDayLong,
   formatHours,
@@ -132,5 +134,23 @@ describe('maskTimeInput', () => {
     expect(maskTimeInput('1730')).toBe('17:30');
     expect(maskTimeInput('17:30')).toBe('17:30');
     expect(maskTimeInput('173045')).toBe('17:30');
+  });
+});
+
+describe('formatos curtos', () => {
+  it('igual ao texto gerado pela BD (private.format_shift)', () => {
+    expect(formatShiftSummary('2026-11-05T07:00:00Z', '2026-11-05T15:00:00Z')).toBe(
+      'qui., 5 nov., 07:00–15:00',
+    );
+    expect(formatShiftSummary('2026-11-09T18:00:00Z', '2026-11-10T00:00:00Z')).toBe(
+      'seg., 9 nov., 18:00–00:00',
+    );
+    expect(formatShiftSummary('2026-05-16T10:00:00Z', '2026-05-16T15:00:00Z')).toBe(
+      'sáb., 16 mai., 11:00–16:00',
+    );
+  });
+
+  it('data e hora', () => {
+    expect(formatDateTimeShort('2026-11-02T14:05:00Z')).toBe('seg., 2 nov., 14:05');
   });
 });

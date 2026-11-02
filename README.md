@@ -7,16 +7,39 @@ de tudo. Existe em duas versões sempre sincronizadas: **site** (Next.js) e **ap
 > O Turno **não substitui nem se liga** ao portal interno da empresa (MPI). Cada pessoa regista
 > os seus próprios turnos; depois de aprovar uma troca, a gerente atualiza o MPI à mão.
 
-**Estado:** fase 1 — login por magic link e "Os meus turnos" (criar, editar, apagar) com
-sincronização em tempo real entre web e mobile. Trocas, aprovações e notificações são a fase 2.
+**Estado:**
+
+- **Fase 1:** login por magic link e "Os meus turnos" (criar, editar, apagar), com sincronização
+  em tempo real entre web e mobile.
+- **Fase 2:** pedidos de troca (trocar, dar o turno, cobrir falta), aceitação por colegas,
+  aprovação ou recusa pela gerência (com avisos de horas e de descanso), histórico de cada pedido,
+  registo de "MPI atualizado", notificações na app e push no telemóvel.
+
+## Como funciona uma troca
+
+1. Em **Turnos**, a pessoa escolhe "Pedir troca" num turno seu que ainda não começou e indica o
+   tipo:
+   - **Trocar turno:** quem aceitar dá um turno seu em troca.
+   - **Dar turno:** alguém fica com o turno.
+   - **Cobrir falta:** a pessoa não pode ir. O pedido é marcado como urgente.
+2. Os colegas veem o pedido em **Pedidos → Podes aceitar** e aceitam. Numa troca, escolhem o
+   turno que oferecem.
+3. A gerente vê o pedido em **Pedidos e aprovações → Para aprovar**, com avisos se alguém fica
+   acima das horas semanais ou com menos de 11 h de descanso. Os avisos não bloqueiam: a gerente
+   aprova ou recusa, com uma nota opcional.
+4. Ao aprovar, o Turno passa o turno para quem aceitou (e, numa troca, o turno oferecido para quem
+   pediu).
+5. A gerente atualiza o MPI à mão e carrega em **"Já atualizei o MPI"**.
+
+Cada passo fica no histórico do pedido, com quem fez o quê e quando.
 
 ## Estrutura
 
 ```
 apps/web         Next.js (App Router) + Tailwind + shadcn/ui
 apps/mobile      Expo (Expo Router)
-packages/shared  tipos da BD, zod, queries, Realtime, regras de horas/descanso, tokens de design
-supabase/        migrações SQL, seed, verificações de RLS, config do CLI
+packages/shared  tipos da BD, zod, queries, Realtime, regras de horas/descanso/trocas, tokens
+supabase/        migrações SQL, seed, verificações de RLS, Edge Function de push, config do CLI
 ```
 
 ## Requisitos
@@ -43,9 +66,15 @@ pnpm db:reset   # aplica supabase/migrations + supabase/seed.sql
 pnpm db:check   # (opcional) corre as verificações de RLS em supabase/checks
 ```
 
-O seed cria a loja "Restaurante Exemplo — Baixa", a gerente `gerente@turno.test` e os
-trabalhadores `ana@turno.test`, `bruno@turno.test` e `carla@turno.test`, com turnos na semana
-atual. Os emails do magic link aparecem no Mailpit/Inbucket: <http://127.0.0.1:54324>.
+O seed cria:
+
+- a loja "Restaurante Exemplo — Baixa";
+- a gerente `gerente@turno.test`;
+- os trabalhadores `ana@turno.test`, `bruno@turno.test` e `carla@turno.test`, com turnos na
+  semana atual e na seguinte;
+- dois pedidos de exemplo: um "cobrir falta" aberto e uma troca já aceite, à espera da gerente.
+
+Os emails do magic link aparecem no Mailpit/Inbucket: <http://127.0.0.1:54324>.
 
 **Opção B: projeto Supabase alojado** — ver [Supabase alojado](#supabase-alojado).
 
@@ -92,13 +121,13 @@ ou apaga um turno num lado e vê-o mudar no outro sem recarregar.
 
 ## Supabase alojado
 
-1. **Aplicar a migração.** Com o CLI:
+1. **Aplicar as migrações.** Com o CLI:
    ```bash
    npx supabase link --project-ref <ref-do-projeto>
    npx supabase db push
    ```
-   Ou copia `supabase/migrations/20261102120000_initial_schema.sql` para o SQL Editor e executa.
-   **Não** corras o `seed.sql` num projeto real (cria utilizadores de teste em `auth.users`).
+   Ou executa no SQL Editor os ficheiros de `supabase/migrations/`, **por ordem**.
+   **Não** corras o `seed.sql` num projeto real: cria utilizadores de teste em `auth.users`.
 2. **Auth → URL Configuration**
    - Site URL: o URL público da web (ou `http://localhost:3000` enquanto não houver).
    - Redirect URLs:
@@ -116,8 +145,55 @@ ou apaga um turno num lado e vê-o mudar no outro sem recarregar.
    values ('<id do auth.users>', '<id da loja>', 'Nome', 'worker', 40);
    -- role: 'worker' ou 'manager'
    ```
-5. **Realtime:** a migração junta `shifts` e `swap_requests` à publicação `supabase_realtime`.
-   Confirma em Database → Publications.
+5. **Realtime:** as migrações juntam `shifts`, `swap_requests`, `swap_request_events` e
+   `notifications` à publicação `supabase_realtime`. Confirma em Database → Publications.
+6. **Notificações push:** ver a secção seguinte.
+
+## Notificações
+
+As notificações são criadas pela base de dados (trigger em `swap_requests`):
+
+| Acontecimento     | Quem recebe                                                            |
+| ----------------- | ---------------------------------------------------------------------- |
+| Pedido criado     | os trabalhadores da loja, exceto quem pediu ("cobrir falta" é urgente) |
+| Pedido aceite     | quem pediu e a gerência                                                |
+| Aprovado/recusado | quem pediu e quem aceitou                                              |
+| Cancelado         | quem tinha aceitado                                                    |
+
+Na web e na app aparecem em tempo real, no separador "Notificações". Para chegarem também por
+**push ao telemóvel**:
+
+1. **Publicar a Edge Function:**
+   ```bash
+   pnpm functions:deploy        # = npx supabase functions deploy send-push --no-verify-jwt
+   ```
+2. **Definir o segredo** que o webhook vai enviar (gera um valor aleatório, por exemplo com
+   `openssl rand -hex 32`):
+   ```bash
+   npx supabase secrets set PUSH_WEBHOOK_SECRET=<valor>
+   # opcional, se ativares "enhanced security" na Expo:
+   npx supabase secrets set EXPO_ACCESS_TOKEN=<token>
+   ```
+   O `SUPABASE_URL` e o `SUPABASE_SERVICE_ROLE_KEY` já existem nas Edge Functions. Não os
+   copies para lado nenhum.
+3. **Criar o Database Webhook** (Database → Webhooks → Create a new hook):
+   - Tabela `public.notifications`, evento **Insert**
+   - Tipo: Supabase Edge Functions → `send-push`, método POST
+   - HTTP Header: `x-webhook-secret` com o mesmo valor do passo 2
+4. **App mobile:**
+   - Corre `npx eas init` em `apps/mobile`, que preenche `extra.eas.projectId` no `app.json`.
+     O token de push precisa deste id.
+   - **Android:** desde o SDK 53, o Expo Go não recebe push remotas. Usa uma development build
+     (`npx expo run:android` ou `npx eas build --profile development`).
+   - **iOS:** usa também uma development build, para teres o comportamento real.
+   - A app pede autorização no separador "Notificações" ("Ativar notificações") e regista o
+     token com a RPC `register_push_token`. Ao sair da conta, o token é removido.
+5. **Web:** não há push no browser nesta fase. As notificações aparecem dentro da app, em tempo
+   real.
+
+Para testar a função localmente: `pnpm functions:test` (testes Deno, sem rede) ou
+`npx supabase functions serve send-push --env-file supabase/functions/.env` (não faças commit
+desse `.env`).
 
 ## Comandos
 

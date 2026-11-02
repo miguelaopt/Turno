@@ -2,11 +2,13 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import type { TurnoClient } from './client';
 import { queryKeys } from '../queries/keys';
 
-export type RealtimeTable = 'shifts' | 'swap_requests';
+export type RealtimeTable = 'shifts' | 'swap_requests' | 'swap_request_events' | 'notifications';
 
 export interface RealtimeChange {
   table: RealtimeTable;
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  /** Linha nova (INSERT/UPDATE), quando o Realtime a envia. */
+  record?: Record<string, unknown>;
 }
 
 /** O mínimo de um QueryClient do TanStack Query de que precisamos. */
@@ -14,19 +16,29 @@ export interface InvalidatingQueryClient {
   invalidateQueries(filters: { queryKey: readonly unknown[] }): Promise<void>;
 }
 
-const TABLES: RealtimeTable[] = ['shifts', 'swap_requests'];
-
-const KEYS_BY_TABLE: Record<RealtimeTable, readonly unknown[]> = {
-  shifts: queryKeys.shifts.all,
-  swap_requests: queryKeys.swapRequests.all,
+/** Que cache invalidar quando cada tabela muda. */
+export const REALTIME_INVALIDATIONS: Record<RealtimeTable, readonly (readonly unknown[])[]> = {
+  // Aprovar uma troca muda o dono dos turnos: os pedidos mostram turnos embebidos.
+  shifts: [queryKeys.shifts.all, queryKeys.swapRequests.all],
+  swap_requests: [queryKeys.swapRequests.all],
+  swap_request_events: [queryKeys.swapRequests.all],
+  notifications: [queryKeys.notifications.all],
 };
 
+interface Subscription {
+  table: RealtimeTable;
+  /** Coluna e valor para o filtro de INSERT/UPDATE. */
+  filter: string;
+  /** DELETE não suporta filtros no Realtime; só ouvimos onde interessa. */
+  deletes: boolean;
+}
+
 /**
- * Subscreve alterações em shifts e swap_requests da loja.
+ * Subscreve alterações da loja (turnos, pedidos, histórico) e as notificações
+ * de quem tem sessão.
  *
- * - INSERT/UPDATE são filtrados por store_id (e o Realtime aplica RLS).
- * - DELETE não suporta filtros no Realtime, por isso ouvimos sem filtro; o
- *   evento só traz a chave primária, sem dados.
+ * - INSERT/UPDATE são filtrados (e o Realtime aplica RLS).
+ * - DELETE (só em shifts) é ouvido sem filtro; o evento só traz a chave primária.
  * - Ao voltar a ligar (ex.: telemóvel acordou), chama `onChange` para cada
  *   tabela, porque podem ter-se perdido eventos.
  *
@@ -34,33 +46,38 @@ const KEYS_BY_TABLE: Record<RealtimeTable, readonly unknown[]> = {
  */
 export function subscribeToStoreChanges(
   client: TurnoClient,
-  storeId: string,
+  scope: { storeId: string; userId: string },
   onChange: (change: RealtimeChange) => void,
 ): () => void {
-  const channel = client.channel(`store:${storeId}`);
+  const subscriptions: Subscription[] = [
+    { table: 'shifts', filter: `store_id=eq.${scope.storeId}`, deletes: true },
+    { table: 'swap_requests', filter: `store_id=eq.${scope.storeId}`, deletes: false },
+    { table: 'swap_request_events', filter: `store_id=eq.${scope.storeId}`, deletes: false },
+    { table: 'notifications', filter: `user_id=eq.${scope.userId}`, deletes: false },
+  ];
 
-  for (const table of TABLES) {
+  const channel = client.channel(`store:${scope.storeId}:user:${scope.userId}`);
+
+  for (const { table, filter, deletes } of subscriptions) {
     const handler = (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
-      onChange({ table, eventType: payload.eventType });
+      onChange({
+        table,
+        eventType: payload.eventType,
+        ...(payload.eventType !== 'DELETE' ? { record: payload.new } : {}),
+      });
     channel
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table, filter: `store_id=eq.${storeId}` },
-        handler,
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table, filter: `store_id=eq.${storeId}` },
-        handler,
-      )
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, handler);
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, handler)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter }, handler);
+    if (deletes) {
+      channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table }, handler);
+    }
   }
 
   let subscribedOnce = false;
   channel.subscribe((status) => {
     if (status !== 'SUBSCRIBED') return;
     if (subscribedOnce) {
-      for (const table of TABLES) onChange({ table, eventType: 'UPDATE' });
+      for (const { table } of subscriptions) onChange({ table, eventType: 'UPDATE' });
     }
     subscribedOnce = true;
   });
@@ -70,13 +87,20 @@ export function subscribeToStoreChanges(
   };
 }
 
-/** Liga o Realtime ao TanStack Query: cada alteração invalida a cache da tabela. */
+/**
+ * Liga o Realtime ao TanStack Query: cada alteração invalida a cache certa.
+ * `onEvent` (opcional) recebe cada alteração, ex.: para mostrar um aviso.
+ */
 export function subscribeAndInvalidate(
   client: TurnoClient,
-  storeId: string,
+  scope: { storeId: string; userId: string },
   queryClient: InvalidatingQueryClient,
+  onEvent?: (change: RealtimeChange) => void,
 ): () => void {
-  return subscribeToStoreChanges(client, storeId, ({ table }) => {
-    void queryClient.invalidateQueries({ queryKey: KEYS_BY_TABLE[table] });
+  return subscribeToStoreChanges(client, scope, (change) => {
+    for (const queryKey of REALTIME_INVALIDATIONS[change.table]) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
+    onEvent?.(change);
   });
 }

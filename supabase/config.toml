@@ -56,3 +56,8 @@ enable_confirmations = false
 double_confirm_changes = true
 max_frequency = "60s"
 otp_expiry = 3600
+
+# Push: chamada por um Database Webhook (INSERT em public.notifications), que
+# se autentica com o cabeçalho x-webhook-secret (PUSH_WEBHOOK_SECRET).
+[functions.send-push]
+verify_jwt = false

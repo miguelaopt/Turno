@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Turno",
+    "slug": "turno",
+    "scheme": "turno",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F5F4F0",
+    "ios": {
+      "bundleIdentifier": "app.turno.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "app.turno.mobile",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F5F4F0"
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}

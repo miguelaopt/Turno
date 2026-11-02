@@ -1,0 +1,35 @@
+{
+  "name": "turno",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@turno/web",
+    "dev:mobile": "turbo run dev --filter=@turno/mobile",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:start": "npx supabase start",
+    "db:stop": "npx supabase stop",
+    "db:reset": "npx supabase db reset",
+    "db:check": "psql \"postgresql://postgres:postgres@127.0.0.1:54322/postgres\" -f supabase/checks/rls_checks.sql",
+    "gen:types": "pnpm --filter @turno/shared gen:types"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.4.0",
+    "prettier": "^3.9.10",
+    "turbo": "^2.11.10",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}

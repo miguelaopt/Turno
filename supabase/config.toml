@@ -1,0 +1,58 @@
+# Configuração do Supabase CLI para desenvolvimento local (`npx supabase start`).
+# Chaves em falta usam os valores por omissão do CLI.
+# Para o projeto alojado, estas definições configuram-se no painel do Supabase
+# (ver README, secção "Supabase alojado").
+
+project_id = "turno"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+# Os emails (magic links) ficam visíveis em http://127.0.0.1:54324
+[inbucket]
+enabled = true
+port = 54324
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+# Destinos permitidos para o magic link:
+#  - web local
+#  - app mobile em build própria (scheme "turno")
+#  - app mobile no Expo Go (exp://<ip>:8081/--/auth/callback)
+additional_redirect_urls = [
+  "http://localhost:3000/auth/callback",
+  "http://127.0.0.1:3000/auth/callback",
+  "turno://**",
+  "exp://**",
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+# Sem registo aberto: só entra quem a gerência adicionou.
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+double_confirm_changes = true
+max_frequency = "60s"
+otp_expiry = 3600

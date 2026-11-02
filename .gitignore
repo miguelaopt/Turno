@@ -1,0 +1,31 @@
+node_modules/
+.turbo/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Expo
+.expo/
+expo-env.d.ts
+apps/mobile/ios/
+apps/mobile/android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Ambiente: nunca fazer commit de chaves reais
+.env
+.env.*
+!.env.example
+
+# Supabase CLI
+supabase/.branches/
+supabase/.temp/
+
+.DS_Store
+*.log
